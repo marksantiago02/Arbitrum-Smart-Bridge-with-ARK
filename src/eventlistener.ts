@@ -1,8 +1,7 @@
 import { ethers } from 'ethers';
 import { Log, EventLog } from 'ethers';
 import dotenv from 'dotenv';
-
-import { relayToOffChainService } from './ark-client';
+import { saveEventToQueue } from './db';
 import { ArbitrumEventData } from './types';
 const CONTRACT_ABI = require('./contract_abi/presale.json');
 
@@ -91,17 +90,17 @@ function setupWebSocketProvider() {
     // Set up event listener
     wsContract.on('RoundCreated', async (...args: any[]) => {
       const event = args[args.length - 1];
-      await processEvent(event, 'WebSocket', args.slice(0, -1), 'RoundCreated');
+      await catchEvent(event, 'WebSocket', args.slice(0, -1), 'RoundCreated');
     });
 
     wsContract.on('TokensBought', async (...args: any[]) => {
       const event = args[args.length - 1];
-      await processEvent(event, 'WebSocket', args.slice(0, -1), 'TokensBought');
+      await catchEvent(event, 'WebSocket', args.slice(0, -1), 'TokensBought');
     })
 
     wsContract.on('TokensClaimed', async (...args: any[]) => {
       const event = args[args.length - 1];
-      await processEvent(event, 'WebSocket', args.slice(0, -1), 'TokensClaimed');
+      await catchEvent(event, 'WebSocket', args.slice(0, -1), 'TokensClaimed');
     })
 
     console.log('WebSocket provider and contract set up successfully');
@@ -116,7 +115,7 @@ function setupWebSocketProvider() {
 
 
 // Process an event regardless of source
-async function processEvent(event: any, source: string, args?: any[], eventName?: 'RoundCreated' | 'TokensBought' | 'TokensClaimed') {
+async function catchEvent(event: any, source: string, args?: any[], eventName?: 'RoundCreated' | 'TokensBought' | 'TokensClaimed') {
   try {
     // Create a unique ID for this event to prevent duplicate processing
     const eventId = `${event.transactionHash}-${event.index || 0}`;
@@ -149,19 +148,62 @@ async function processEvent(event: any, source: string, args?: any[], eventName?
       actualEventName = 'RoundCreated';
     }
 
+    const eventArgs = args ? args : (isEventLog(event) ? Array.from(event.args || []) : []);
+
     // Process the event data
     const eventData: ArbitrumEventData = {
+      eventId: eventId,
       transactionHash: event.transactionHash,
       blockNumber: event.blockNumber,
       event: actualEventName,
-      args: args ? args : (isEventLog(event) ? Array.from(event.args || []) : [])
+      args: eventArgs,
+      processed: false,
+      createdAt: new Date(),
     };
+
+    if (actualEventName === 'TokensBought' || actualEventName === 'TokensClaimed') {
+      try {
+        // Extract user address from event args
+        const userAddress = eventArgs[0];
+
+        if (userAddress) {
+          // Get user rounds
+          const userRounds = await httpContract.getUserRounds(userAddress);
+
+          // Create an object to store user purchase details for each round
+          const userPurchaseDetails: any = {};
+
+          // For each round, get purchase details
+          for (const roundId of userRounds) {
+            const purchaseDetails = await httpContract.getUserRoundPurchase(userAddress, roundId);
+
+            userPurchaseDetails[roundId] = {
+              amountBought: purchaseDetails[0].toString(),
+              amountClaimed: purchaseDetails[1].toString(),
+              totalClaimable: purchaseDetails[2].toString(),
+              cliffCompleted: purchaseDetails[3],
+              lastClaimTime: purchaseDetails[4].toString()
+              // unclaimedPeriodsPassed: purchaseDetails[5].toString()
+            };
+          }
+
+          // Add user info to the event data
+          eventData.userInfo = {
+            address: userAddress,
+            rounds: userRounds,
+            purchaseDetails: userPurchaseDetails
+          };
+        }
+      } catch (userInfoError) {
+        console.error('Error fetching user information:', userInfoError);
+      }
+    }
 
     console.log(`${actualEventName} event data:`, eventData);
 
     // Relay to ARK chain
     // await relayToArk(eventData);
-    await relayToOffChainService(eventData)
+    await saveEventToQueue(eventData)
 
     // Limit the size of processedEvents to prevent memory leaks
     if (processedEvents.size > 1000) {
@@ -249,7 +291,7 @@ export async function startEventListener() {
 
               // Process each event
               for (const event of events) {
-                await processEvent(event, 'Polling', undefined, eventType as any);
+                await catchEvent(event, 'Polling', undefined, eventType as any);
               }
             }
           } catch (eventError) {
