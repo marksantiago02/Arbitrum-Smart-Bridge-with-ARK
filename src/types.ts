@@ -1,3 +1,7 @@
+import { Interfaces } from "@arkecosystem/crypto";
+
+export type ArkTransaction = Interfaces.ITransaction;
+
 export interface TransactionResponse {
     id: string;
 }
@@ -7,7 +11,7 @@ export interface CreateTransactionApiResponse {
 }
 
 export interface ArbitrumEventData {
-    eventId: string;           // Unique identifier for the event
+    eventId: string;
     transactionHash: string;
     blockNumber: number;
     event: 'RoundCreated' | 'TokensBought' | 'TokensClaimed';
@@ -26,9 +30,10 @@ export interface ArbitrumEventData {
             }
         }
     };
-    processed: boolean;        // Flag to track processing status
-    createdAt: Date;           // When the event was captured
-    processedAt?: Date;        // When the event was processed
+    
+    processed: boolean;
+    createdAt: Date;
+    processedAt?: Date;
 }
 
 export interface EventQueueRow {
@@ -44,12 +49,16 @@ export interface EventQueueRow {
     processedAt: Date | null;
 }
 
-// Interface for user info row
 export interface UserInfoRow {
     ethAddress: string;
-    arkAddress: string;
-    rounds: string | any[]; // Add this field
-    purchaseDetails: string | Record<string, any>; // Add this field
+    arkInfo: {
+        arkMnemonic: string;
+        arkPublicKey: string;
+        arkPrivateKey: string;
+        arkAddress: string;
+    }
+    rounds: string | any[];
+    purchaseDetails: string | Record<string, any>;
     lastUpdated: Date;
     createdAt: Date;
 }
