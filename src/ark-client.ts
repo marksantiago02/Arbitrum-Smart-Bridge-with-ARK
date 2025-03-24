@@ -1,14 +1,14 @@
-import { Transactions, Managers, Utils, Identities } from '@arkecosystem/crypto';
+import { Transactions, Managers, Interfaces, Identities } from '@arkecosystem/crypto';
 import { generateMnemonic } from 'bip39';
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { ArbitrumEventData } from './types'
+import { ArbitrumEventData, ArkTransaction } from './types'
 
 dotenv.config();
 
 // ARK node details
 const ARK_NODE_URL = process.env.ARK_NODE_DEVNET_URL!;
-const ARK_BRIDGE_PASSPHRASE = process.env.ARK_BRIDGE_PASSPHRASE!;
+const ARK_BRIDGE_MNEMONIC = process.env.ARK_BRIDGE_MNEMONIC!;
 const ARK_NETWORK = process.env.ARK_NETWORK || 'devnet';
 const RELAYER_API_URL = process.env.RELAYER_API_URL || 'http://localhost:3000';
 
@@ -18,7 +18,7 @@ Managers.configManager.setHeight(2); // Set appropriate height for your network
 
 export function createArkBridgeClient() {
     // Create wallet from passphrase
-    const bridgeAddress = Identities.Address.fromPassphrase(ARK_BRIDGE_PASSPHRASE);
+    const bridgeAddress = Identities.Address.fromPassphrase(ARK_BRIDGE_MNEMONIC);
 
     console.log(`ARK Bridge wallet address: ${bridgeAddress}`);
 
@@ -34,7 +34,7 @@ export function createArkBridgeClient() {
     }
 
     // Send a transaction to the ARK network
-    async function sendTransaction(transaction: any): Promise<string> {
+    async function sendTransaction(transaction: ArkTransaction): Promise<string> {
         try {
             const response = await axios.post(`${ARK_NODE_URL}/api/transactions`, {
                 transactions: [transaction],
@@ -45,7 +45,7 @@ export function createArkBridgeClient() {
                 throw new Error(`Transaction failed: ${JSON.stringify(response.data.errors)}`);
             }
 
-            const txId = transaction.id;
+            const txId = transaction.id!;
             console.log(`Transaction ${txId} sent successfully`);
             return txId;
         } catch (error) {
@@ -55,21 +55,21 @@ export function createArkBridgeClient() {
     }
 
     // Mint tokens on ARK blockchain
-    async function mintTokens(arkAddress: string, amount: bigint): Promise<string> {
+    async function mintTokens(arkClientAddress: string, amount: bigint): Promise<string> {
         try {
-            console.log(`Minting ${amount} tokens for ${arkAddress}`);
+            console.log(`Minting ${amount} tokens for ${arkClientAddress}`);
 
-            const transaction = Transactions.BuilderFactory
+            const transaction: ArkTransaction = Transactions.BuilderFactory
                 .transfer()
-                .recipientId(arkAddress)
+                .recipientId(arkClientAddress)
                 .amount(amount.toString())
                 .vendorField(JSON.stringify({
                     action: 'mint',
                     token: 'HMESH'
                 }))
                 .nonce(await getNextNonce(bridgeAddress))
-                .fee('10000000') // Fixed fee
-                .sign(ARK_BRIDGE_PASSPHRASE)
+                .fee('10000000')
+                .sign(ARK_BRIDGE_MNEMONIC)
                 .build();
 
             return await sendTransaction(transaction);
@@ -80,13 +80,14 @@ export function createArkBridgeClient() {
     }
 
     // Burn tokens on ARK blockchain
-    async function burnTokens(CLIENT_ARK_PASSPHRASE: string, amount: bigint): Promise<string> {
+    async function burnTokens(ARK_CLIENT_MNEMONIC: string, amount: bigint): Promise<string> {
         try {
-            console.log(`Burning ${amount} tokens for ${CLIENT_ARK_PASSPHRASE}`);
+            const arkAddress = Identities.PublicKey.fromPassphrase(ARK_CLIENT_MNEMONIC);
+            console.log(`Burning ${amount} tokens for ${arkAddress}`);
 
-            const transaction = Transactions.BuilderFactory
+            const transaction: ArkTransaction = Transactions.BuilderFactory
                 .transfer()
-                .recipientId(bridgeAddress) // Send to bridge address for burning
+                .recipientId(bridgeAddress)
                 .amount(amount.toString())
                 .vendorField(JSON.stringify({
                     action: 'burn',
@@ -94,7 +95,7 @@ export function createArkBridgeClient() {
                 }))
                 .nonce(await getNextNonce(bridgeAddress))
                 .fee('10000000') // Fixed fee
-                .sign(CLIENT_ARK_PASSPHRASE)
+                .sign(ARK_CLIENT_MNEMONIC)
                 .build();
 
             return await sendTransaction(transaction);
@@ -121,7 +122,6 @@ export function createARKWallet() {
 
     return { mnemonic, publicKey, privateKey, address }
 }
-
 
 export async function relayToOffChainService(eventData: ArbitrumEventData) {
     try {

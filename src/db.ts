@@ -37,17 +37,17 @@ export async function initializeDatabase(): Promise<void> {
 
         // Create the user_info table with JSONB fields to store pre-fetched data
         await client.query(`
-        CREATE TABLE IF NOT EXISTS user_info (
-          eth_address VARCHAR(255) PRIMARY KEY,
-          ark_address VARCHAR(255) UNIQUE NOT NULL,
-          rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
-          purchase_details JSONB NOT NULL DEFAULT '{}'::jsonb,
-          last_updated TIMESTAMP NOT NULL,
-          created_at TIMESTAMP NOT NULL
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_user_info_ark_address ON user_info(ark_address);
-      `);
+            CREATE TABLE IF NOT EXISTS user_info (
+              eth_address VARCHAR(255) PRIMARY KEY,
+              ark_info JSONB NOT NULL,
+              rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
+              purchase_details JSONB NOT NULL DEFAULT '{}'::jsonb,
+              last_updated TIMESTAMP NOT NULL,
+              created_at TIMESTAMP NOT NULL
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_user_info_ark_address ON user_info((ark_info->>'arkAddress'));
+          `);
 
         console.log('Database tables initialized successfully');
     } catch (error) {
@@ -58,21 +58,16 @@ export async function initializeDatabase(): Promise<void> {
     }
 }
 
+/**
+ * save event to the queue
+ */
 export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<void> {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        let userAddress = null;
-        if (eventData.userInfo && eventData.userInfo.address) {
-            userAddress = eventData.userInfo.address;
-        } else if (eventData.event === 'TokensBought' || eventData.event === 'TokensClaimed') {
-            // If userInfo is not available but it's a user-related event,
-            // try to extract the address
-            userAddress = eventData.args[0];
-        }
+        let userAddress = eventData.userInfo?.address || (eventData.args && eventData.args.length > 0 ? eventData.args[0] : null);
 
-        // Save the event to the event_queue table
         const insertEventQuery = `
       INSERT INTO event_queue (
         event_id, 
@@ -84,7 +79,7 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
         user_address,
         processed,
         created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
       ON CONFLICT (event_id) DO NOTHING
     `;
 
@@ -105,13 +100,19 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
             `;
             const userResult = await client.query<UserInfoRow>(userCheckQuery, [userAddress]);
             if (userResult.rowCount === 0) {
-                // User doesn't exist, create a new ARK wallet and add user
-                const arkClientAddress = createARKWallet();
+                const arkWallet = createARKWallet();
+
+                const arkInfo = {
+                    arkMnemonic: arkWallet.mnemonic,
+                    arkPublicKey: arkWallet.publicKey,
+                    arkPrivateKey: arkWallet.privateKey,
+                    arkAddress: arkWallet.address
+                }
 
                 const insertUserQuery = `
                 INSERT INTO user_info (
                   eth_address,
-                  ark_address,
+                  ark_info,
                   rounds,
                   purchase_details,
                   last_updated,
@@ -119,15 +120,14 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
                 ) VALUES ($1, $2, $3, $4, NOW(), NOW())
               `;
 
-                // Initialize with zeros for bought/claimed amounts
                 await client.query(insertUserQuery, [
                     userAddress,
-                    arkClientAddress,
+                    JSON.stringify(arkInfo),
                     JSON.stringify(eventData.userInfo!.rounds || []),
                     JSON.stringify(eventData.userInfo!.purchaseDetails || {})
                 ]);
 
-                console.log(`Created new user with ETH address ${userAddress} and ARK address ${arkClientAddress}`);
+                console.log(`Created new user with ETH address ${userAddress} and ARK address ${arkWallet.address}`);
             } else {
                 const updateUserQuery = `
                 UPDATE user_info
@@ -159,6 +159,9 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
     }
 }
 
+/**
+ * mark event as processed 
+ */
 export async function markEventAsProcessed(eventId: string): Promise<void> {
     const client = await pool.connect();
     try {
@@ -232,7 +235,7 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
         const query = `
         SELECT 
           eth_address as "ethAddress",
-          ark_address as "arkAddress",
+          ark_info as "arkInfo",
           rounds,
           purchase_details as "purchaseDetails",
           last_updated as "lastUpdated",
@@ -249,9 +252,9 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
-        // Parse JSON fields
         return {
             ...user,
+            arkInfo: typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo,
             rounds: typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds,
             purchaseDetails: typeof user.purchaseDetails === 'string'
                 ? JSON.parse(user.purchaseDetails)
@@ -274,7 +277,7 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
         const query = `
         SELECT 
           eth_address as "ethAddress",
-          ark_address as "arkAddress",
+          ark_info as "arkInfo",
           rounds,
           purchase_details as "purchaseDetails",
           last_updated as "lastUpdated",
@@ -291,9 +294,9 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
-        // Parse JSON fields
         return {
             ...user,
+            arkInfo: typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo,
             rounds: typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds,
             purchaseDetails: typeof user.purchaseDetails === 'string'
                 ? JSON.parse(user.purchaseDetails)

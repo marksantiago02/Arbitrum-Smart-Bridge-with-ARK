@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import { Log, EventLog } from 'ethers';
 import dotenv from 'dotenv';
-import { saveEventToQueue } from './db';
+import { processEvent } from './eventprocessor';
 import { ArbitrumEventData } from './types';
 const CONTRACT_ABI = require('./contract_abi/presale.json');
 
@@ -201,9 +201,7 @@ async function catchEvent(event: any, source: string, args?: any[], eventName?: 
 
     console.log(`${actualEventName} event data:`, eventData);
 
-    // Relay to ARK chain
-    // await relayToArk(eventData);
-    await saveEventToQueue(eventData)
+    await processEvent(eventData)
 
     // Limit the size of processedEvents to prevent memory leaks
     if (processedEvents.size > 1000) {
