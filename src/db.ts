@@ -6,7 +6,7 @@ import { ArbitrumEventData, UserInfoRow, EventQueueRow } from './types';
 dotenv.config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DB_URL,
 });
 
 /**
@@ -58,9 +58,6 @@ export async function initializeDatabase(): Promise<void> {
     }
 }
 
-/**
- * save event to the queue
- */
 export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<void> {
     const client = await pool.connect();
     try {
@@ -68,80 +65,80 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
 
         let userAddress = eventData.userInfo?.address || (eventData.args && eventData.args.length > 0 ? eventData.args[0] : null);
 
+        const processedArgs = replaceBigInts(eventData.args);
+        const processedUserInfo = replaceBigInts(eventData.userInfo || {});
+
         const insertEventQuery = `
-      INSERT INTO event_queue (
-        event_id, 
-        transaction_hash, 
-        block_number, 
-        event_type, 
-        args, 
-        user_info,
-        user_address,
-        processed,
-        created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-      ON CONFLICT (event_id) DO NOTHING
-    `;
+            INSERT INTO event_queue (
+                event_id, 
+                transaction_hash, 
+                block_number, 
+                event_type, 
+                args, 
+                user_info,
+                user_address,
+                processed,
+                created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NOW())
+            ON CONFLICT (event_id) DO NOTHING
+        `;
 
         const eventResult = await client.query(insertEventQuery, [
             eventData.eventId,
             eventData.transactionHash,
             eventData.blockNumber,
             eventData.event,
-            JSON.stringify(eventData.args),
-            JSON.stringify(eventData.userInfo || {}),
-            userAddress,
-            false
+            JSON.stringify(processedArgs),
+            JSON.stringify(processedUserInfo),
+            userAddress
         ]);
 
         if (eventResult.rowCount! > 0 && userAddress) {
-            const userCheckQuery = `
-            SELECT * FROM user_info WHERE eth_address = $1
-            `;
+            const userCheckQuery = `SELECT * FROM user_info WHERE eth_address = $1`;
             const userResult = await client.query<UserInfoRow>(userCheckQuery, [userAddress]);
+
             if (userResult.rowCount === 0) {
                 const arkWallet = createARKWallet();
-
                 const arkInfo = {
                     arkMnemonic: arkWallet.mnemonic,
                     arkPublicKey: arkWallet.publicKey,
                     arkPrivateKey: arkWallet.privateKey,
                     arkAddress: arkWallet.address
-                }
+                };
 
                 const insertUserQuery = `
-                INSERT INTO user_info (
-                  eth_address,
-                  ark_info,
-                  rounds,
-                  purchase_details,
-                  last_updated,
-                  created_at
-                ) VALUES ($1, $2, $3, $4, NOW(), NOW())
-              `;
+                    INSERT INTO user_info (
+                        eth_address,
+                        ark_info,
+                        rounds,
+                        purchase_details,
+                        last_updated,
+                        created_at
+                    ) VALUES ($1, $2, $3, $4, NOW(), NOW())
+                `;
 
                 await client.query(insertUserQuery, [
                     userAddress,
                     JSON.stringify(arkInfo),
-                    JSON.stringify(eventData.userInfo!.rounds || []),
-                    JSON.stringify(eventData.userInfo!.purchaseDetails || {})
+                    JSON.stringify(replaceBigInts(eventData.userInfo!.rounds || [])),
+                    JSON.stringify(replaceBigInts(eventData.userInfo!.purchaseDetails || {}))
                 ]);
 
                 console.log(`Created new user with ETH address ${userAddress} and ARK address ${arkWallet.address}`);
             } else {
                 const updateUserQuery = `
-                UPDATE user_info
-                SET 
-                  rounds = $2,
-                  purchase_details = $3,
-                  last_updated = NOW()
-                WHERE eth_address = $1
-              `;
+                    UPDATE user_info
+                    SET 
+                        rounds = $2,
+                        purchase_details = $3,
+                        last_updated = NOW()
+                    WHERE eth_address = $1
+                `;
 
                 await client.query(updateUserQuery, [
                     userAddress,
-                    JSON.stringify(eventData.userInfo!.rounds || []),
-                    JSON.stringify(eventData.userInfo!.purchaseDetails || {})
+                    JSON.stringify(replaceBigInts(eventData.userInfo!.rounds || [])),
+                    JSON.stringify(replaceBigInts(eventData.userInfo!.purchaseDetails || {}))
                 ]);
 
                 console.log(`Updated user info for ETH address ${userAddress}`);
@@ -206,17 +203,44 @@ export async function getUnprocessedEvents(limit: number = 10): Promise<Arbitrum
 
         const result = await client.query<EventQueueRow>(query, [limit]);
 
-        return result.rows.map(row => ({
-            eventId: row.eventId,
-            transactionHash: row.transactionHash,
-            blockNumber: typeof row.blockNumber === 'string' ? parseInt(row.blockNumber, 10) : row.blockNumber,
-            event: row.event,
-            args: JSON.parse(row.args),
-            userInfo: JSON.parse(row.userInfo),
-            userAddress: row.userAddress,
-            processed: row.processed,
-            createdAt: row.createdAt
-        }));
+        return result.rows.map(row => {
+            let parsedArgs = [];
+            let parsedUserInfo: any = {
+                address: row.userAddress || '',
+                rounds: [],
+                purchaseDetails: {}
+            };
+
+            try {
+                parsedArgs = typeof row.args === 'string' ? JSON.parse(row.args) : row.args;
+            } catch (e: any) {
+                console.warn(`Failed to parse args for event ${row.eventId}: ${e.message}`);
+                parsedArgs = typeof row.args === 'object' ? row.args : [];
+            }
+
+            try {
+                const tempUserInfo = typeof row.userInfo === 'string' ? JSON.parse(row.userInfo) : row.userInfo;
+
+                parsedUserInfo = {
+                    address: tempUserInfo.address || row.userAddress || '',
+                    rounds: tempUserInfo.rounds || [],
+                    purchaseDetails: tempUserInfo.purchaseDetails || {}
+                };
+            } catch (e: any) {
+                console.warn(`Failed to parse userInfo for event ${row.eventId}: ${e.message}`);
+            }
+
+            return {
+                eventId: row.eventId,
+                transactionHash: row.transactionHash,
+                blockNumber: typeof row.blockNumber === 'string' ? parseInt(row.blockNumber, 10) : row.blockNumber,
+                event: row.event as 'RoundCreated' | 'TokensBought' | 'TokensClaimed',
+                args: parsedArgs,
+                userInfo: parsedUserInfo,
+                processed: row.processed,
+                createdAt: row.createdAt
+            };
+        });
     } catch (error) {
         console.error('Error getting unprocessed events:', error);
         throw error;
@@ -225,10 +249,9 @@ export async function getUnprocessedEvents(limit: number = 10): Promise<Arbitrum
     }
 }
 
-
 /**
-* Get user information by ETH address
-*/
+ * Get user information by ETH address
+ */
 export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserInfoRow | null> {
     const client = await pool.connect();
     try {
@@ -252,13 +275,49 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
+        let arkInfo: any = {
+            arkMnemonic: '',
+            arkPublicKey: '',
+            arkPrivateKey: '',
+            arkAddress: ''
+        };
+
+        let rounds = [];
+        let purchaseDetails = {};
+
+        try {
+            const parsedArkInfo = typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo;
+            arkInfo = {
+                arkMnemonic: parsedArkInfo.arkMnemonic || '',
+                arkPublicKey: parsedArkInfo.arkPublicKey || '',
+                arkPrivateKey: parsedArkInfo.arkPrivateKey || '',
+                arkAddress: parsedArkInfo.arkAddress || ''
+            };
+        } catch (e: any) {
+            console.warn(`Failed to parse arkInfo for user ${ethAddress}: ${e.message}`);
+        }
+
+        try {
+            rounds = typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds;
+        } catch (e: any) {
+            console.warn(`Failed to parse rounds for user ${ethAddress}: ${e.message}`);
+            rounds = typeof user.rounds === 'object' ? user.rounds : [];
+        }
+
+        try {
+            purchaseDetails = typeof user.purchaseDetails === 'string'
+                ? JSON.parse(user.purchaseDetails)
+                : user.purchaseDetails;
+        } catch (e: any) {
+            console.warn(`Failed to parse purchaseDetails for user ${ethAddress}: ${e.message}`);
+            purchaseDetails = typeof user.purchaseDetails === 'object' ? user.purchaseDetails : {};
+        }
+
         return {
             ...user,
-            arkInfo: typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo,
-            rounds: typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds,
-            purchaseDetails: typeof user.purchaseDetails === 'string'
-                ? JSON.parse(user.purchaseDetails)
-                : user.purchaseDetails
+            arkInfo,
+            rounds,
+            purchaseDetails
         };
     } catch (error) {
         console.error(`Error getting user info for ${ethAddress}:`, error);
@@ -283,7 +342,7 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
           last_updated as "lastUpdated",
           created_at as "createdAt"
         FROM user_info 
-        WHERE ark_address = $1
+        WHERE (ark_info->>'arkAddress') = $1
       `;
 
         const result = await client.query<UserInfoRow>(query, [arkAddress]);
@@ -294,13 +353,49 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
+        let arkInfo: any = {
+            arkMnemonic: '',
+            arkPublicKey: '',
+            arkPrivateKey: '',
+            arkAddress: arkAddress || ''
+        };
+
+        let rounds = [];
+        let purchaseDetails = {};
+
+        try {
+            const parsedArkInfo = typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo;
+            arkInfo = {
+                arkMnemonic: parsedArkInfo.arkMnemonic || '',
+                arkPublicKey: parsedArkInfo.arkPublicKey || '',
+                arkPrivateKey: parsedArkInfo.arkPrivateKey || '',
+                arkAddress: parsedArkInfo.arkAddress || arkAddress || ''
+            };
+        } catch (e: any) {
+            console.warn(`Failed to parse arkInfo for ARK address ${arkAddress}: ${e.message}`);
+        }
+
+        try {
+            rounds = typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds;
+        } catch (e: any) {
+            console.warn(`Failed to parse rounds for ARK address ${arkAddress}: ${e.message}`);
+            rounds = typeof user.rounds === 'object' ? user.rounds : [];
+        }
+
+        try {
+            purchaseDetails = typeof user.purchaseDetails === 'string'
+                ? JSON.parse(user.purchaseDetails)
+                : user.purchaseDetails;
+        } catch (e: any) {
+            console.warn(`Failed to parse purchaseDetails for ARK address ${arkAddress}: ${e.message}`);
+            purchaseDetails = typeof user.purchaseDetails === 'object' ? user.purchaseDetails : {};
+        }
+
         return {
             ...user,
-            arkInfo: typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo,
-            rounds: typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds,
-            purchaseDetails: typeof user.purchaseDetails === 'string'
-                ? JSON.parse(user.purchaseDetails)
-                : user.purchaseDetails
+            arkInfo,
+            rounds,
+            purchaseDetails
         };
     } catch (error) {
         console.error(`Error getting user info for ARK address ${arkAddress}:`, error);
@@ -339,22 +434,73 @@ export async function getEventsByUserAddress(
 
         const result = await client.query<EventQueueRow>(query, [userAddress, limit]);
 
-        return result.rows.map(row => ({
-            eventId: row.eventId,
-            transactionHash: row.transactionHash,
-            blockNumber: typeof row.blockNumber === 'string' ? parseInt(row.blockNumber, 10) : row.blockNumber,
-            event: row.event,
-            args: JSON.parse(row.args),
-            userInfo: JSON.parse(row.userInfo),
-            userAddress: row.userAddress,
-            processed: row.processed,
-            createdAt: row.createdAt,
-            processedAt: row.processedAt!
-        }));
+        return result.rows.map(row => {
+            let parsedArgs = [];
+            let parsedUserInfo: any = {
+                address: row.userAddress || '',
+                rounds: [],
+                purchaseDetails: {}
+            };
+
+            try {
+                parsedArgs = typeof row.args === 'string' ? JSON.parse(row.args) : row.args;
+            } catch (e: any) {
+                console.warn(`Failed to parse args for event ${row.eventId}: ${e.message}`);
+                parsedArgs = typeof row.args === 'object' ? row.args : [];
+            }
+
+            try {
+                const tempUserInfo = typeof row.userInfo === 'string' ? JSON.parse(row.userInfo) : row.userInfo;
+
+                parsedUserInfo = {
+                    address: tempUserInfo.address || row.userAddress || '',
+                    rounds: tempUserInfo.rounds || [],
+                    purchaseDetails: tempUserInfo.purchaseDetails || {}
+                };
+            } catch (e: any) {
+                console.warn(`Failed to parse userInfo for event ${row.eventId}: ${e.message}`);
+            }
+
+            return {
+                eventId: row.eventId,
+                transactionHash: row.transactionHash,
+                blockNumber: typeof row.blockNumber === 'string' ? parseInt(row.blockNumber, 10) : row.blockNumber,
+                event: row.event as 'RoundCreated' | 'TokensBought' | 'TokensClaimed',
+                args: parsedArgs,
+                userInfo: parsedUserInfo,
+                processed: row.processed,
+                createdAt: row.createdAt,
+                processedAt: row.processedAt!
+            };
+        });
     } catch (error) {
         console.error(`Error getting events for user ${userAddress}:`, error);
         throw error;
     } finally {
         client.release();
     }
+}
+
+function replaceBigInts(obj: any): any {
+    if (obj === null || obj === undefined) {
+        return obj;
+    }
+
+    if (typeof obj === 'bigint') {
+        return obj.toString();
+    }
+
+    if (Array.isArray(obj)) {
+        return obj.map(replaceBigInts);
+    }
+
+    if (typeof obj === 'object') {
+        const result: any = {};
+        for (const key in obj) {
+            result[key] = replaceBigInts(obj[key]);
+        }
+        return result;
+    }
+
+    return obj;
 }
