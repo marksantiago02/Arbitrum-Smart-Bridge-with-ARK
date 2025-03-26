@@ -1,12 +1,13 @@
 import { Transactions, Managers, Interfaces, Identities } from '@arkecosystem/crypto';
 import { generateMnemonic } from 'bip39';
 import axios from 'axios';
+import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
-import { ArbitrumEventData, ArkTransaction } from './types'
+import { HmeshTransaction } from './types'
 
 dotenv.config();
 
-// ARK node details
+// HMESH node details
 const HMESH_DEVNET_NODE_URL = process.env.HMESH_DEVNET_NODE_URL!;
 const HMESH_BRIDGE_MNEMONIC = process.env.HMESH_BRIDGE_MNEMONIC!;
 const HMESH_NETWORK = process.env.HMESH_NETWORK || 'devnet';
@@ -15,11 +16,13 @@ const HMESH_NETWORK = process.env.HMESH_NETWORK || 'devnet';
 Managers.configManager.setFromPreset(HMESH_NETWORK as any);
 Managers.configManager.setHeight(2);
 
-export function createArkBridgeClient() {
+// const hmeshClient
+
+export function createHmeshBridgeClient() {
     // Create wallet from passphrase
     const bridgeAddress = Identities.Address.fromPassphrase(HMESH_BRIDGE_MNEMONIC);
 
-    console.log(`ARK Bridge wallet address: ${bridgeAddress}`);
+    console.log(`HMESH Bridge wallet address: ${bridgeAddress}`);
 
     // Get the next nonce for the wallet
     async function getNextNonce(address: string): Promise<string> {
@@ -32,8 +35,8 @@ export function createArkBridgeClient() {
         }
     }
 
-    // Send a transaction to the ARK network
-    async function sendTransaction(transaction: ArkTransaction): Promise<string> {
+    // Send a transaction to the HMESH network
+    async function sendTransaction(transaction: HmeshTransaction): Promise<string> {
         try {
             const response = await axios.post(`${HMESH_DEVNET_NODE_URL}/api/transactions`, {
                 transactions: [transaction],
@@ -53,15 +56,15 @@ export function createArkBridgeClient() {
         }
     }
 
-    // Mint tokens on ARK blockchain
-    async function mintTokens(arkClientAddress: string, amount: bigint): Promise<string> {
+    // Mint tokens on HMESH blockchain
+    async function mintTokens(hmeshClientAddress: string, amount: bigint): Promise<string> {
         try {
-            console.log(`Minting ${amount} tokens for ${arkClientAddress}`);
+            console.log(`Minting ${amount} tokens for ${hmeshClientAddress}`);
             console.log(`nonce of the bridge address: ${await getNextNonce(bridgeAddress)}`)
 
-            const transaction: ArkTransaction = Transactions.BuilderFactory
+            const transaction: HmeshTransaction = Transactions.BuilderFactory
                 .transfer()
-                .recipientId(arkClientAddress)
+                .recipientId(hmeshClientAddress)
                 // .amount(amount.toString())
                 .amount("100000000")
                 .vendorField(JSON.stringify({
@@ -80,13 +83,13 @@ export function createArkBridgeClient() {
         }
     }
 
-    // Burn tokens on ARK blockchain
+    // Burn tokens on HMESH blockchain
     async function burnTokens(HMESH_CLIENT_MNEMONIC: string, amount: bigint): Promise<string> {
         try {
-            const arkAddress = Identities.PublicKey.fromPassphrase(HMESH_CLIENT_MNEMONIC);
-            console.log(`Burning ${amount} tokens for ${arkAddress}`);
+            const hmeshAddress = Identities.PublicKey.fromPassphrase(HMESH_CLIENT_MNEMONIC);
+            console.log(`Burning ${amount} tokens for ${hmeshAddress}`);
 
-            const transaction: ArkTransaction = Transactions.BuilderFactory
+            const transaction: HmeshTransaction = Transactions.BuilderFactory
                 .transfer()
                 .recipientId(bridgeAddress)
                 .amount(amount.toString())
@@ -114,7 +117,7 @@ export function createArkBridgeClient() {
     };
 }
 
-export function createARKWallet() {
+export function createHMESHWallet() {
     const mnemonic: string = generateMnemonic(256);
 
     const publicKey = Identities.PublicKey.fromPassphrase(mnemonic);
