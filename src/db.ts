@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
-import { createARKWallet } from './ark-client';
+import { createHMESHWallet } from './hmesh-client';
 import { ArbitrumEventData, UserInfoRow, EventQueueRow } from './types';
 
 dotenv.config();
@@ -39,14 +39,14 @@ export async function initializeDatabase(): Promise<void> {
         await client.query(`
             CREATE TABLE IF NOT EXISTS user_info (
               eth_address VARCHAR(255) PRIMARY KEY,
-              ark_info JSONB NOT NULL,
+              hmesh_info JSONB NOT NULL,
               rounds JSONB NOT NULL DEFAULT '[]'::jsonb,
               purchase_details JSONB NOT NULL DEFAULT '{}'::jsonb,
               last_updated TIMESTAMP NOT NULL,
               created_at TIMESTAMP NOT NULL
             );
             
-            CREATE INDEX IF NOT EXISTS idx_user_info_ark_address ON user_info((ark_info->>'arkAddress'));
+            CREATE INDEX IF NOT EXISTS idx_user_info_hmesh_address ON user_info((hmesh_info->>'hmeshAddress'));
           `);
 
         console.log('Database tables initialized successfully');
@@ -98,18 +98,18 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
             const userResult = await client.query<UserInfoRow>(userCheckQuery, [userAddress]);
 
             if (userResult.rowCount === 0) {
-                const arkWallet = createARKWallet();
-                const arkInfo = {
-                    arkMnemonic: arkWallet.mnemonic,
-                    arkPublicKey: arkWallet.publicKey,
-                    arkPrivateKey: arkWallet.privateKey,
-                    arkAddress: arkWallet.address
+                const hmeshWallet = createHMESHWallet();
+                const hmeshInfo = {
+                    hmeshMnemonic: hmeshWallet.mnemonic,
+                    hmeshPublicKey: hmeshWallet.publicKey,
+                    hmeshPrivateKey: hmeshWallet.privateKey,
+                    hmeshAddress: hmeshWallet.address
                 };
 
                 const insertUserQuery = `
                     INSERT INTO user_info (
                         eth_address,
-                        ark_info,
+                        hmesh_info,
                         rounds,
                         purchase_details,
                         last_updated,
@@ -119,12 +119,12 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
 
                 await client.query(insertUserQuery, [
                     userAddress,
-                    JSON.stringify(arkInfo),
+                    JSON.stringify(hmeshInfo),
                     JSON.stringify(replaceBigInts(eventData.userInfo!.rounds || [])),
                     JSON.stringify(replaceBigInts(eventData.userInfo!.purchaseDetails || {}))
                 ]);
 
-                console.log(`Created new user with ETH address ${userAddress} and ARK address ${arkWallet.address}`);
+                console.log(`Created new user with ETH address ${userAddress} and HMESH address ${hmeshWallet.address}`);
             } else {
                 const updateUserQuery = `
                     UPDATE user_info
@@ -258,7 +258,7 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
         const query = `
         SELECT 
           eth_address as "ethAddress",
-          ark_info as "arkInfo",
+          hmesh_info as "hmeshInfo",
           rounds,
           purchase_details as "purchaseDetails",
           last_updated as "lastUpdated",
@@ -275,26 +275,26 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
-        let arkInfo: any = {
-            arkMnemonic: '',
-            arkPublicKey: '',
-            arkPrivateKey: '',
-            arkAddress: ''
+        let hmeshInfo: any = {
+            hmeshMnemonic: '',
+            hmeshPublicKey: '',
+            hmeshPrivateKey: '',
+            hmeshAddress: ''
         };
 
         let rounds = [];
         let purchaseDetails = {};
 
         try {
-            const parsedArkInfo = typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo;
-            arkInfo = {
-                arkMnemonic: parsedArkInfo.arkMnemonic || '',
-                arkPublicKey: parsedArkInfo.arkPublicKey || '',
-                arkPrivateKey: parsedArkInfo.arkPrivateKey || '',
-                arkAddress: parsedArkInfo.arkAddress || ''
+            const parsedHmeshInfo = typeof user.hmeshInfo === 'string' ? JSON.parse(user.hmeshInfo) : user.hmeshInfo;
+            hmeshInfo = {
+                hmeshMnemonic: parsedHmeshInfo.hmeshMnemonic || '',
+                hmeshPublicKey: parsedHmeshInfo.hmeshPublicKey || '',
+                hmeshPrivateKey: parsedHmeshInfo.hmeshPrivateKey || '',
+                hmeshAddress: parsedHmeshInfo.hmeshAddress || ''
             };
         } catch (e: any) {
-            console.warn(`Failed to parse arkInfo for user ${ethAddress}: ${e.message}`);
+            console.warn(`Failed to parse hmeshInfo for user ${ethAddress}: ${e.message}`);
         }
 
         try {
@@ -315,7 +315,7 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
 
         return {
             ...user,
-            arkInfo,
+            hmeshInfo,
             rounds,
             purchaseDetails
         };
@@ -328,24 +328,24 @@ export async function getUserInfoByEthAddress(ethAddress: string): Promise<UserI
 }
 
 /**
- * Get user information by ARK address
+ * Get user information by HMESH address
  */
-export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserInfoRow | null> {
+export async function getUserInfoByHmeshAddress(hmeshAddress: string): Promise<UserInfoRow | null> {
     const client = await pool.connect();
     try {
         const query = `
         SELECT 
           eth_address as "ethAddress",
-          ark_info as "arkInfo",
+          hmesh_info as "hmeshInfo",
           rounds,
           purchase_details as "purchaseDetails",
           last_updated as "lastUpdated",
           created_at as "createdAt"
         FROM user_info 
-        WHERE (ark_info->>'arkAddress') = $1
+        WHERE (hmesh_info->>'hmeshAddress') = $1
       `;
 
-        const result = await client.query<UserInfoRow>(query, [arkAddress]);
+        const result = await client.query<UserInfoRow>(query, [hmeshAddress]);
 
         if (result.rowCount === 0) {
             return null;
@@ -353,32 +353,32 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
 
         const user = result.rows[0];
 
-        let arkInfo: any = {
-            arkMnemonic: '',
-            arkPublicKey: '',
-            arkPrivateKey: '',
-            arkAddress: arkAddress || ''
+        let hmeshInfo: any = {
+            hmeshMnemonic: '',
+            hmeshPublicKey: '',
+            hmeshPrivateKey: '',
+            hmeshAddress: hmeshAddress || ''
         };
 
         let rounds = [];
         let purchaseDetails = {};
 
         try {
-            const parsedArkInfo = typeof user.arkInfo === 'string' ? JSON.parse(user.arkInfo) : user.arkInfo;
-            arkInfo = {
-                arkMnemonic: parsedArkInfo.arkMnemonic || '',
-                arkPublicKey: parsedArkInfo.arkPublicKey || '',
-                arkPrivateKey: parsedArkInfo.arkPrivateKey || '',
-                arkAddress: parsedArkInfo.arkAddress || arkAddress || ''
+            const parsedHmeshInfo = typeof user.hmeshInfo === 'string' ? JSON.parse(user.hmeshInfo) : user.hmeshInfo;
+            hmeshInfo = {
+                hmeshMnemonic: parsedHmeshInfo.hmeshMnemonic || '',
+                hmeshPublicKey: parsedHmeshInfo.hmeshPublicKey || '',
+                hmeshPrivateKey: parsedHmeshInfo.hmeshPrivateKey || '',
+                hmeshAddress: parsedHmeshInfo.hmeshAddress || hmeshAddress || ''
             };
         } catch (e: any) {
-            console.warn(`Failed to parse arkInfo for ARK address ${arkAddress}: ${e.message}`);
+            console.warn(`Failed to parse hmeshInfo for HMESH address ${hmeshAddress}: ${e.message}`);
         }
 
         try {
             rounds = typeof user.rounds === 'string' ? JSON.parse(user.rounds) : user.rounds;
         } catch (e: any) {
-            console.warn(`Failed to parse rounds for ARK address ${arkAddress}: ${e.message}`);
+            console.warn(`Failed to parse rounds for HMESH address ${hmeshAddress}: ${e.message}`);
             rounds = typeof user.rounds === 'object' ? user.rounds : [];
         }
 
@@ -387,18 +387,18 @@ export async function getUserInfoByArkAddress(arkAddress: string): Promise<UserI
                 ? JSON.parse(user.purchaseDetails)
                 : user.purchaseDetails;
         } catch (e: any) {
-            console.warn(`Failed to parse purchaseDetails for ARK address ${arkAddress}: ${e.message}`);
+            console.warn(`Failed to parse purchaseDetails for HMESH address ${hmeshAddress}: ${e.message}`);
             purchaseDetails = typeof user.purchaseDetails === 'object' ? user.purchaseDetails : {};
         }
 
         return {
             ...user,
-            arkInfo,
+            hmeshInfo,
             rounds,
             purchaseDetails
         };
     } catch (error) {
-        console.error(`Error getting user info for ARK address ${arkAddress}:`, error);
+        console.error(`Error getting user info for HMESH address ${hmeshAddress}:`, error);
         throw error;
     } finally {
         client.release();

@@ -23,6 +23,7 @@
     "@arkecosystem/crypto": "^3.9.1",
     "@types/pg": "^8.11.11",
     "axios": "^1.8.3",
+    "axios-retry": "^4.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "ethers": "^6.13.5",

@@ -1,6 +1,6 @@
 import { Interfaces } from "@arkecosystem/crypto";
 
-export type ArkTransaction = Interfaces.ITransaction;
+export type HmeshTransaction = Interfaces.ITransaction;
 
 export interface TransactionResponse {
     id: string;
@@ -51,11 +51,11 @@ export interface EventQueueRow {
 
 export interface UserInfoRow {
     ethAddress: string;
-    arkInfo: {
-        arkMnemonic: string;
-        arkPublicKey: string;
-        arkPrivateKey: string;
-        arkAddress: string;
+    hmeshInfo: {
+        hmeshMnemonic: string;
+        hmeshPublicKey: string;
+        hmeshPrivateKey: string;
+        hmeshAddress: string;
     }
     rounds: string | any[];
     purchaseDetails: string | Record<string, any>;

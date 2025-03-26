@@ -1,4 +1,4 @@
-import { createArkBridgeClient } from './ark-client';
+import { createHmeshBridgeClient } from './hmesh-client';
 import { initializeDatabase, saveEventToQueue, getUnprocessedEvents, getUserInfoByEthAddress, markEventAsProcessed } from './db';
 import { ArbitrumEventData } from './types';
 
@@ -45,9 +45,9 @@ async function processEventData(event: ArbitrumEventData): Promise<void> {
             console.error(`User info not found for address: ${event.userInfo.address}`);
             return;
         }
-        // Validate that we have the required ARK info
-        if (!userInfoRow.arkInfo || !userInfoRow.arkInfo.arkMnemonic) {
-            console.error(`Missing ARK mnemonic for user: ${event.userInfo.address}`);
+        // Validate that we have the required HMESH info
+        if (!userInfoRow.hmeshInfo || !userInfoRow.hmeshInfo.hmeshMnemonic) {
+            console.error(`Missing HMESH mnemonic for user: ${event.userInfo.address}`);
             return;
         }
 
@@ -67,10 +67,10 @@ async function processEventData(event: ArbitrumEventData): Promise<void> {
                 }
                 console.log('Processing TokensBought event:', event);
 
-                await createArkBridgeClient().mintTokens(userInfoRow?.arkInfo.arkAddress!, BigInt(event.args[0]));
+                await createHmeshBridgeClient().mintTokens(userInfoRow?.hmeshInfo.hmeshAddress!, BigInt(event.args[0]));
                 break;
             case 'TokensClaimed':
-                await createArkBridgeClient().burnTokens(userInfoRow?.arkInfo.arkMnemonic!, BigInt(event.args[0]));
+                await createHmeshBridgeClient().burnTokens(userInfoRow?.hmeshInfo.hmeshMnemonic!, BigInt(event.args[0]));
                 console.log('Processing TokensClaimed event:', event);
                 break;
             default:
