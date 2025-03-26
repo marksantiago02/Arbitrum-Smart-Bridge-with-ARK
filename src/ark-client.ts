@@ -7,25 +7,24 @@ import { ArbitrumEventData, ArkTransaction } from './types'
 dotenv.config();
 
 // ARK node details
-const ARK_NODE_URL = process.env.ARK_NODE_DEVNET_URL!;
-const ARK_BRIDGE_MNEMONIC = process.env.ARK_BRIDGE_MNEMONIC!;
-const ARK_NETWORK = process.env.ARK_NETWORK || 'devnet';
-const RELAYER_API_URL = process.env.RELAYER_API_URL || 'http://localhost:3000';
+const HMESH_DEVNET_NODE_URL = process.env.HMESH_DEVNET_NODE_URL!;
+const HMESH_BRIDGE_MNEMONIC = process.env.HMESH_BRIDGE_MNEMONIC!;
+const HMESH_NETWORK = process.env.HMESH_NETWORK || 'devnet';
 
 // Configure the network
-Managers.configManager.setFromPreset(ARK_NETWORK as any);
-Managers.configManager.setHeight(2); // Set appropriate height for your network
+Managers.configManager.setFromPreset(HMESH_NETWORK as any);
+Managers.configManager.setHeight(2);
 
 export function createArkBridgeClient() {
     // Create wallet from passphrase
-    const bridgeAddress = Identities.Address.fromPassphrase(ARK_BRIDGE_MNEMONIC);
+    const bridgeAddress = Identities.Address.fromPassphrase(HMESH_BRIDGE_MNEMONIC);
 
     console.log(`ARK Bridge wallet address: ${bridgeAddress}`);
 
     // Get the next nonce for the wallet
     async function getNextNonce(address: string): Promise<string> {
         try {
-            const response = await axios.get(`${ARK_NODE_URL}/api/wallets/${address}`);
+            const response = await axios.get(`${HMESH_DEVNET_NODE_URL}/api/wallets/${address}`);
             return (parseInt(response.data.data.nonce) + 1).toString();
         } catch (error) {
             console.error('Error fetching nonce:', error);
@@ -36,7 +35,7 @@ export function createArkBridgeClient() {
     // Send a transaction to the ARK network
     async function sendTransaction(transaction: ArkTransaction): Promise<string> {
         try {
-            const response = await axios.post(`${ARK_NODE_URL}/api/transactions`, {
+            const response = await axios.post(`${HMESH_DEVNET_NODE_URL}/api/transactions`, {
                 transactions: [transaction],
             });
 
@@ -58,18 +57,20 @@ export function createArkBridgeClient() {
     async function mintTokens(arkClientAddress: string, amount: bigint): Promise<string> {
         try {
             console.log(`Minting ${amount} tokens for ${arkClientAddress}`);
+            console.log(`nonce of the bridge address: ${await getNextNonce(bridgeAddress)}`)
 
             const transaction: ArkTransaction = Transactions.BuilderFactory
                 .transfer()
                 .recipientId(arkClientAddress)
-                .amount(amount.toString())
+                // .amount(amount.toString())
+                .amount("100000000")
                 .vendorField(JSON.stringify({
                     action: 'mint',
                     token: 'HMESH'
                 }))
                 .nonce(await getNextNonce(bridgeAddress))
                 .fee('10000000')
-                .sign(ARK_BRIDGE_MNEMONIC)
+                .sign(HMESH_BRIDGE_MNEMONIC)
                 .build();
 
             return await sendTransaction(transaction);
@@ -80,9 +81,9 @@ export function createArkBridgeClient() {
     }
 
     // Burn tokens on ARK blockchain
-    async function burnTokens(ARK_CLIENT_MNEMONIC: string, amount: bigint): Promise<string> {
+    async function burnTokens(HMESH_CLIENT_MNEMONIC: string, amount: bigint): Promise<string> {
         try {
-            const arkAddress = Identities.PublicKey.fromPassphrase(ARK_CLIENT_MNEMONIC);
+            const arkAddress = Identities.PublicKey.fromPassphrase(HMESH_CLIENT_MNEMONIC);
             console.log(`Burning ${amount} tokens for ${arkAddress}`);
 
             const transaction: ArkTransaction = Transactions.BuilderFactory
@@ -95,7 +96,7 @@ export function createArkBridgeClient() {
                 }))
                 .nonce(await getNextNonce(bridgeAddress))
                 .fee('10000000') // Fixed fee
-                .sign(ARK_CLIENT_MNEMONIC)
+                .sign(HMESH_CLIENT_MNEMONIC)
                 .build();
 
             return await sendTransaction(transaction);
@@ -123,22 +124,22 @@ export function createARKWallet() {
     return { mnemonic, publicKey, privateKey, address }
 }
 
-export async function relayToOffChainService(eventData: ArbitrumEventData) {
-    try {
-        console.log('Sending event to off-chain relayer:', eventData);
+// export async function relayToOffChainService(eventData: ArbitrumEventData) {
+//     try {
+//         console.log('Sending event to off-chain relayer:', eventData);
 
-        // Send data to the relayer service
-        const response = await axios.post(`${RELAYER_API_URL}/processEvent`, eventData, {
-            headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': process.env.RELAYER_API_KEY
-            }
-        });
+//         // Send data to the relayer service
+//         const response = await axios.post(`${RELAYER_API_URL}/processEvent`, eventData, {
+//             headers: {
+//                 'Content-Type': 'application/json',
+//                 'X-API-Key': process.env.RELAYER_API_KEY
+//             }
+//         });
 
-        console.log('Event sent to relayer service:', response.data);
-        return response.data;
-    } catch (error) {
-        console.error('Error sending to relayer service:', error);
-        throw error;
-    }
-}
+//         console.log('Event sent to relayer service:', response.data);
+//         return response.data;
+//     } catch (error) {
+//         console.error('Error sending to relayer service:', error);
+//         throw error;
+//     }
+// }

@@ -236,8 +236,6 @@ export async function startEventListener() {
       .filter((item: any) => item.type === 'event')
       .map((item: any) => item.name);
 
-    console.log('Available events in contract:', eventNames);
-
     // Get current block to start polling from
     let lastCheckedBlock = await httpProvider.getBlockNumber();
     console.log(`Starting from block ${lastCheckedBlock}`);
