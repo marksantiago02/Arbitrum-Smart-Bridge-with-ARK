@@ -4,11 +4,14 @@ import { ArbitrumEventData } from './types';
 
 export async function processEvent(eventData: ArbitrumEventData): Promise<void> {
     try {
+        console.log("processing event data")
         await initializeDatabase();
 
+        console.log("save events to queue")
         await saveEventToQueue(eventData);
 
         const unprocessedEvents = await getUnprocessedEvents();
+        console.log(`Found ${unprocessedEvents.length} unprocessed events`);
 
         if (unprocessedEvents.length === 0) {
             console.log('No unprocessed events found.');

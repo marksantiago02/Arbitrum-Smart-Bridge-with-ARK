@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "ts-node src/index.ts"
+    "start": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +29,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
+    "nodemon": "^3.1.9",
     "pg": "^8.14.1"
   }
 }
