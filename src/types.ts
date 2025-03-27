@@ -1,7 +1,29 @@
 import { Interfaces } from "@arkecosystem/crypto";
 
-export type HmeshTransaction = Interfaces.ITransaction;
+// export type HmeshTransaction = Interfaces.ITransaction;
 
+export interface HmeshTransaction {
+    id?: string;
+    blockId?: string;
+    version?: number;
+    type?: number;
+    typeGroup?: number;
+    amount?: string;
+    fee?: string;
+    sender?: string;
+    senderPublicKey?: string;
+    recipient?: string;
+    recipientId?: string;
+    signature?: string;
+    signatures?: string[];
+    vendorField?: string;
+    asset?: any;
+    confirmations?: number;
+    timestamp?: any;
+    nonce?: string;
+    [key: string]: any;
+  }
+ 
 export interface TransactionResponse {
     id: string;
 }

@@ -170,7 +170,7 @@ async function testConnectivity() {
 async function getTransactions() {
   try {
     console.log("Fetching transactions with axios...");
-    const response = await axios.post(`${API_URL}/api/transactions`, {
+    const response = await axios.get(`${API_URL}/api/transactions`, {
       params: {
         page: 1,
         limit: 10
