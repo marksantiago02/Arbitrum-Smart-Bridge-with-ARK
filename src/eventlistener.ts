@@ -231,11 +231,6 @@ export async function startEventListener() {
 
     console.log(`Contract found at ${CONTRACT_ADDRESS}`);
 
-    // Get all event names from ABI to verify RoundCreated exists
-    const eventNames = CONTRACT_ABI
-      .filter((item: any) => item.type === 'event')
-      .map((item: any) => item.name);
-
     // Get current block to start polling from
     let lastCheckedBlock = await httpProvider.getBlockNumber();
     console.log(`Starting from block ${lastCheckedBlock}`);

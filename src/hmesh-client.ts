@@ -96,8 +96,8 @@ export function createHmeshBridgeClient() {
                 .version(2)
                 .nonce(nonce)
                 .recipientId(hmeshClientAddress)
-                // .amount(amountWithDecimals)
-                .amount("100000000")
+                .amount(amountWithDecimals)
+                // .amount("100000000")
                 .vendorField(JSON.stringify({
                     action: 'mint',
                     token: 'HMESH'
