@@ -49,20 +49,16 @@ First it catches the event of a new transaction on the Arbitrum network when use
 ```typescript
 async function catchEvent(event: any, source: string, args?: any[], eventName?: 'RoundCreated' | 'TokensBought' | 'TokensClaimed') {
   try {
-    // Create a unique ID for this event to prevent duplicate processing
     const eventId = `${event.transactionHash}-${event.index || 0}`;
 
-    // Skip if we've already processed this event
     if (processedEvents.has(eventId)) {
       return;
     }
 
-    // Mark as processed
     processedEvents.add(eventId);
 
     console.log(`${source}: ${eventName || 'Unknown'} event detected at block ${event.blockNumber}`);
 
-    // Type guard to check if this is an EventLog (for polling method)
     const isEventLog = (log: Log | EventLog): log is EventLog => {
       return 'args' in log;
     };
@@ -72,17 +68,14 @@ async function catchEvent(event: any, source: string, args?: any[], eventName?: 
     if (eventName) {
       actualEventName = eventName;
     } else if (isEventLog(event) && event.fragment && event.fragment.name) {
-      // Try to get from event fragment
       actualEventName = event.fragment.name as 'RoundCreated' | 'TokensBought' | 'TokensClaimed';
     } else {
-      // Default to RoundCreated if we can't determine
       console.warn('Could not determine event type, defaulting to RoundCreated');
       actualEventName = 'RoundCreated';
     }
 
     const eventArgs = args ? args : (isEventLog(event) ? Array.from(event.args || []) : []);
 
-    // Process the event data
     const eventData: ArbitrumEventData = {
       eventId: eventId,
       transactionHash: event.transactionHash,
@@ -95,17 +88,12 @@ async function catchEvent(event: any, source: string, args?: any[], eventName?: 
 
     if (actualEventName === 'TokensBought' || actualEventName === 'TokensClaimed') {
       try {
-        // Extract user address from event args
         const userAddress = eventArgs[0];
 
         if (userAddress) {
-          // Get user rounds
           const userRounds = await httpContract.getUserRounds(userAddress);
-
-          // Create an object to store user purchase details for each round
           const userPurchaseDetails: any = {};
 
-          // For each round, get purchase details
           for (const roundId of userRounds) {
             const purchaseDetails = await httpContract.getUserRoundPurchase(userAddress, roundId);
 
@@ -115,11 +103,9 @@ async function catchEvent(event: any, source: string, args?: any[], eventName?: 
               totalClaimable: purchaseDetails[2].toString(),
               cliffCompleted: purchaseDetails[3],
               lastClaimTime: purchaseDetails[4].toString()
-              // unclaimedPeriodsPassed: purchaseDetails[5].toString()
             };
           }
 
-          // Add user info to the event data
           eventData.userInfo = {
             address: userAddress,
             rounds: userRounds,
@@ -135,7 +121,6 @@ async function catchEvent(event: any, source: string, args?: any[], eventName?: 
 
     await processEvent(eventData)
 
-    // Limit the size of processedEvents to prevent memory leaks
     if (processedEvents.size > 1000) {
       const toRemove = Array.from(processedEvents).slice(0, 500);
       toRemove.forEach(id => processedEvents.delete(id));
@@ -178,7 +163,6 @@ export function createHMESHWallet() {
                 .nonce(nonce)
                 .recipientId(hmeshClientAddress)
                 .amount(amountWithDecimals)
-                // .amount("100000000")
                 .vendorField(JSON.stringify({
                     action: 'mint',
                     token: 'HMESH'
