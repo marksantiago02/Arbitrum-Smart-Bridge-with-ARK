@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 
-// Use an environment variable for the encryption key
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'your-fallback-encryption-key';
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY!;
 const IV_LENGTH = 16; // For AES, this is always 16
 
 export function encrypt(text: string): string {

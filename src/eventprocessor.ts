@@ -1,6 +1,7 @@
 import { createHmeshBridgeClient } from './hmesh-client';
 import { initializeDatabase, saveEventToQueue, getUnprocessedEvents, getUserInfoByEthAddress, markEventAsProcessed } from './db';
 import { ArbitrumEventData } from './types';
+import { decrypt } from './utils';
 
 export async function processEvent(eventData: ArbitrumEventData): Promise<void> {
     try {
@@ -71,7 +72,8 @@ async function processEventData(event: ArbitrumEventData): Promise<void> {
                 await createHmeshBridgeClient().mintTokens(userInfoRow?.hmeshInfo.hmeshAddress!, BigInt(event.args[2]));
                 break;
             case 'TokensClaimed':
-                await createHmeshBridgeClient().burnTokens(userInfoRow?.hmeshInfo.hmeshMnemonic!, BigInt(event.args[2]));
+                const decryptedHmeshMnemonic = decrypt(userInfoRow?.hmeshInfo.hmeshMnemonic!)
+                await createHmeshBridgeClient().burnTokens(decryptedHmeshMnemonic, BigInt(event.args[2]));
                 console.log('Processing TokensClaimed event:', event);
                 break;
             default:
