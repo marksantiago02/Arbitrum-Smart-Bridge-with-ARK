@@ -103,9 +103,9 @@ export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<vo
             if (userResult.rowCount === 0) {
                 const hmeshWallet = createHMESHWallet();
                 const hmeshInfo = {
-                    hmeshMnemonic: hmeshWallet.mnemonic,
+                    hmeshMnemonic: hmeshWallet.encryptedMnemonic,
                     hmeshPublicKey: hmeshWallet.publicKey,
-                    hmeshPrivateKey: hmeshWallet.privateKey,
+                    hmeshPrivateKey: hmeshWallet.encryptedPrivateKey,
                     hmeshAddress: hmeshWallet.address
                 };
 

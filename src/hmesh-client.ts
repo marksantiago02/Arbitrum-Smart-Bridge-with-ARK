@@ -3,6 +3,7 @@ import { generateMnemonic } from 'bip39';
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
+import { encrypt } from './utils';
 import { HmeshTransaction } from './types'
 
 dotenv.config();
@@ -171,5 +172,8 @@ export function createHMESHWallet() {
     const privateKey = Identities.PrivateKey.fromPassphrase(mnemonic);
     const address = Identities.Address.fromPassphrase(mnemonic);
 
-    return { mnemonic, publicKey, privateKey, address }
+    const encryptedMnemonic = encrypt(mnemonic);
+    const encryptedPrivateKey = encrypt(privateKey);
+
+    return { encryptedMnemonic, publicKey, encryptedPrivateKey, address }
 }
