@@ -61,12 +61,23 @@ export function createHmeshBridgeClient() {
                 console.error('Transaction errors:', response.data.errors);
                 throw new Error(`Transaction failed: ${JSON.stringify(response.data.errors)}`);
             }
+            
+            if (response.data.data && response.data.data.accept && response.data.data.accept.length > 0) {
+                const txId = response.data.data.accept[0];
+                console.log(`Transaction ${txId} accepted by the network`);
+                return txId;
+              }
 
             const txId = transaction.id!;
             console.log(`Transaction ${txId} sent successfully`);
             return txId;
-        } catch (error) {
+        } catch (error:any) {
             console.error('Error sending transaction:', error);
+
+            if (error.response) {
+                console.error('Response status:', error.response.status);
+                console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+              }
             throw error;
         }
     }
@@ -75,14 +86,17 @@ export function createHmeshBridgeClient() {
     async function mintTokens(hmeshClientAddress: string, amount: bigint): Promise<string> {
         try {
             console.log(`Minting ${amount} tokens for ${hmeshClientAddress}`);
-            console.log(`nonce of the bridge address: ${await getNextNonce(bridgeAddress)}`)
+            const nonce = await getNextNonce(bridgeAddress);
+
+            const amountWithDecimals = (amount / BigInt(10000000000)).toString();
+            console.log(`Converted native HMESH coinst with 8 decimals: ${amountWithDecimals}`);
 
             const transaction:HmeshTransaction = Transactions.BuilderFactory
                 .transfer()
                 .version(2)
-                .nonce(await getNextNonce(bridgeAddress))
+                .nonce(nonce)
                 .recipientId(hmeshClientAddress)
-                // .amount(amount.toString())
+                // .amount(amountWithDecimals)
                 .amount("100000000")
                 .vendorField(JSON.stringify({
                     action: 'mint',
@@ -93,9 +107,9 @@ export function createHmeshBridgeClient() {
                 .sign(HMESH_BRIDGE_MNEMONIC)
                 .build();
 
-            console.log('Transaction details:', transaction);
+            console.log('Transaction details:', transaction.data);
 
-            const txId = await sendTransaction(transaction);
+            const txId = await sendTransaction(transaction.data);
             console.log(`Successfully minted ${amount} HMESH tokens. Transaction ID: ${txId}`);
             return txId;
         } catch (error:any) {
@@ -106,27 +120,36 @@ export function createHmeshBridgeClient() {
               throw new Error(`Failed to mint tokens: ${error.message}`);
         }
     }
-
+    
     // Burn tokens on HMESH blockchain
     async function burnTokens(HMESH_CLIENT_MNEMONIC: string, amount: bigint): Promise<string> {
         try {
-            const hmeshAddress = Identities.PublicKey.fromPassphrase(HMESH_CLIENT_MNEMONIC);
-            console.log(`Burning ${amount} tokens for ${hmeshAddress}`);
+            const hmeshClientAddress = Identities.Address.fromPassphrase(HMESH_CLIENT_MNEMONIC);
+            console.log(`Burning ${amount} tokens for ${hmeshClientAddress}`);
+
+            const nonce = await getNextNonce(hmeshClientAddress);
+
+            const amountWithDecimals = (amount / BigInt(10000000000)).toString();
+            console.log(`Converted native HMESH coinst with 8 decimals: ${amountWithDecimals}`);
 
             const transaction: HmeshTransaction = Transactions.BuilderFactory
                 .transfer()
+                .version(2)
+                .nonce(nonce)
                 .recipientId(bridgeAddress)
-                .amount(amount.toString())
+                .amount(amountWithDecimals.toString())
                 .vendorField(JSON.stringify({
                     action: 'burn',
                     token: 'HMESH',
                 }))
-                .nonce(await getNextNonce(bridgeAddress))
                 .fee('10000000')
+                .typeGroup(1)
                 .sign(HMESH_CLIENT_MNEMONIC)
                 .build();
 
-            const txId = await sendTransaction(transaction);
+            console.log('Transaction details:', transaction.data);
+
+            const txId = await sendTransaction(transaction.data);
             console.log(`Successfully burned ${amount} HMESH tokens. Transaction ID: ${txId}`)
             return txId;
         } catch (error) {
@@ -135,12 +158,10 @@ export function createHmeshBridgeClient() {
         }
     }
 
-    // Return the client interface
     return {
         mintTokens,
-        burnTokens,
-        getNextNonce
-    };
+        burnTokens
+        };
 }
 
 export function createHMESHWallet() {

@@ -66,11 +66,12 @@ async function processEventData(event: ArbitrumEventData): Promise<void> {
                     return;
                 }
                 console.log('Processing TokensBought event:', event);
+                console.log(`mintToken amount ---> ${BigInt(event.args[2])}`);
 
-                await createHmeshBridgeClient().mintTokens(userInfoRow?.hmeshInfo.hmeshAddress!, BigInt(event.args[0]));
+                await createHmeshBridgeClient().mintTokens(userInfoRow?.hmeshInfo.hmeshAddress!, BigInt(event.args[2]));
                 break;
             case 'TokensClaimed':
-                await createHmeshBridgeClient().burnTokens(userInfoRow?.hmeshInfo.hmeshMnemonic!, BigInt(event.args[0]));
+                await createHmeshBridgeClient().burnTokens(userInfoRow?.hmeshInfo.hmeshMnemonic!, BigInt(event.args[2]));
                 console.log('Processing TokensClaimed event:', event);
                 break;
             default:
