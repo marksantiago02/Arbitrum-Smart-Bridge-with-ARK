@@ -53,7 +53,7 @@ export function createHmeshBridgeClient() {
     async function sendTransaction(transaction: HmeshTransaction): Promise<string> {
         try {
             console.log('Sending transaction...')
-            const response = await hmeshClient.post('api/transactions', {
+            const response = await hmeshClient.post(`${HMESH_DEVNET_NODE_URL}/api/transactions`, {
                 transactions: [transaction],
             });
 
@@ -77,8 +77,10 @@ export function createHmeshBridgeClient() {
             console.log(`Minting ${amount} tokens for ${hmeshClientAddress}`);
             console.log(`nonce of the bridge address: ${await getNextNonce(bridgeAddress)}`)
 
-            const transaction: HmeshTransaction = Transactions.BuilderFactory
+            const transaction:HmeshTransaction = Transactions.BuilderFactory
                 .transfer()
+                .version(2)
+                .nonce(await getNextNonce(bridgeAddress))
                 .recipientId(hmeshClientAddress)
                 // .amount(amount.toString())
                 .amount("100000000")
@@ -86,10 +88,12 @@ export function createHmeshBridgeClient() {
                     action: 'mint',
                     token: 'HMESH'
                 }))
-                .nonce(await getNextNonce(bridgeAddress))
                 .fee('10000000')
+                .typeGroup(1)
                 .sign(HMESH_BRIDGE_MNEMONIC)
                 .build();
+
+            console.log('Transaction details:', transaction);
 
             const txId = await sendTransaction(transaction);
             console.log(`Successfully minted ${amount} HMESH tokens. Transaction ID: ${txId}`);
@@ -148,23 +152,3 @@ export function createHMESHWallet() {
 
     return { mnemonic, publicKey, privateKey, address }
 }
-
-// export async function relayToOffChainService(eventData: ArbitrumEventData) {
-//     try {
-//         console.log('Sending event to off-chain relayer:', eventData);
-
-//         // Send data to the relayer service
-//         const response = await axios.post(`${RELAYER_API_URL}/processEvent`, eventData, {
-//             headers: {
-//                 'Content-Type': 'application/json',
-//                 'X-API-Key': process.env.RELAYER_API_KEY
-//             }
-//         });
-
-//         console.log('Event sent to relayer service:', response.data);
-//         return response.data;
-//     } catch (error) {
-//         console.error('Error sending to relayer service:', error);
-//         throw error;
-//     }
-// }

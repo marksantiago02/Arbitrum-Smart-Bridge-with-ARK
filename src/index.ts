@@ -1,4 +1,5 @@
 import { testPastEvents, startEventListener } from "./eventlistener";
+import { resetDatabase } from "./db";
 
 // Main execution
 async function main() {
@@ -13,6 +14,7 @@ async function main() {
 
         // Start the event listener
         await startEventListener();
+        // await resetDatabase();
     } catch (error) {
         console.error('Fatal error:', error);
         process.exit(1);
