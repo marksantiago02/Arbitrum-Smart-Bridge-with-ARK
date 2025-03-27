@@ -58,6 +58,9 @@ export async function initializeDatabase(): Promise<void> {
     }
 }
 
+/**
+ * Save an event to the queue
+ */
 export async function saveEventToQueue(eventData: ArbitrumEventData): Promise<void> {
     const client = await pool.connect();
     try {
@@ -504,3 +507,35 @@ function replaceBigInts(obj: any): any {
 
     return obj;
 }
+
+/**
+ * Reset database by dropping and recreating tables
+ */
+export async function resetDatabase(): Promise<void> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      await client.query(`
+        DROP TABLE IF EXISTS event_queue CASCADE;
+        DROP TABLE IF EXISTS user_info CASCADE;
+      `);
+      
+      console.log('Existing tables dropped successfully');
+            
+      await client.query('COMMIT');
+      console.log('Database reset completed successfully');
+    } catch (error) {
+      console.error('Error in resetDatabase(), rolling back:', error);
+      try {
+        await client.query('ROLLBACK');
+        console.log('Rollback completed');
+      } catch (rollbackError) {
+        console.error('Error during rollback:', rollbackError);
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  

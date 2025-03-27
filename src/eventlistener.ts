@@ -269,8 +269,6 @@ export async function startEventListener() {
         const fromBlock = lastCheckedBlock + 1;
         const toBlock = Math.min(currentBlock, fromBlock + batchSize - 1);
 
-        console.log(`Polling: Checking blocks ${fromBlock} to ${toBlock} (current: ${currentBlock})`);
-
         // Process all relevant event types
         const eventTypes = ['RoundCreated', 'TokensBought', 'TokensClaimed'];
 
