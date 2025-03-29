@@ -46,7 +46,6 @@ async function processEventData(event: ArbitrumEventData): Promise<void> {
             console.error(`User info not found for address: ${event.userInfo.address}`);
             return;
         }
-        // Validate that we have the required HMESH info
         if (!userInfoRow.hmeshInfo || !userInfoRow.hmeshInfo.hmeshMnemonic) {
             console.error(`Missing HMESH mnemonic for user: ${event.userInfo.address}`);
             return;

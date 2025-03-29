@@ -1,7 +1,3 @@
-import { Interfaces } from "@arkecosystem/crypto";
-
-// export type HmeshTransaction = Interfaces.ITransaction;
-
 export interface HmeshTransaction {
     id?: string;
     blockId?: string;

@@ -3,8 +3,9 @@ import { generateMnemonic } from 'bip39';
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
-import { encrypt } from './utils';
+import { decrypt, encrypt } from './utils';
 import { HmeshTransaction } from './types'
+import { getUserInfoByHmeshAddress } from './db';
 
 dotenv.config();
 
@@ -159,9 +160,89 @@ export function createHmeshBridgeClient() {
         }
     }
 
+    // Submit a vote on HMESH blockchain
+    async function submitVote(hmeshClientAddress:string, delegatePublicKey:string):Promise<string> {
+        try {
+            console.log(`Submitting vote for ${delegatePublicKey} from ${hmeshClientAddress}`);
+
+            const hmesh_client_walletInfo = await getUserInfoByHmeshAddress(hmeshClientAddress);
+            const hmesh_client_mnemonic = hmesh_client_walletInfo?.hmeshInfo.hmeshMnemonic!;
+
+            const nonce = await getNextNonce(decrypt(hmesh_client_mnemonic));
+
+            const transaction:HmeshTransaction = Transactions.BuilderFactory
+                .vote()
+                .version(2)
+                .nonce(nonce)
+                .votesAsset([`+${delegatePublicKey}`])
+                .fee('10000000')
+                .typeGroup(1)
+                .sign(hmesh_client_mnemonic)
+                .build();
+
+            console.log('Transaction details:', transaction.data);
+            const txId = await sendTransaction(transaction.data);
+            console.log(`Successfully submitted vote for ${delegatePublicKey}. Transaction ID: ${txId}`);
+            return txId;
+
+        } catch(error) {
+            console.error('Error submitting vote transactions:', error);
+            throw error;
+        }
+    }
+
+    // Submit an unvote on HMESH blockchain
+    async function submitUnvote(hmeshClientAddress:string, delegatePublicKey:string):Promise<string> {
+        try {
+            console.log(`Submitting unvote for ${delegatePublicKey} from ${hmeshClientAddress}`);
+
+            const hmesh_client_walletInfo = await getUserInfoByHmeshAddress(hmeshClientAddress);
+            const hmesh_client_mnemonic = hmesh_client_walletInfo?.hmeshInfo.hmeshMnemonic!;
+
+            const nonce = await getNextNonce(decrypt(hmesh_client_mnemonic));
+
+            const transaction:HmeshTransaction = Transactions.BuilderFactory
+                .vote()
+                .version(2)
+                .nonce(nonce)
+                .votesAsset([`-${delegatePublicKey}`])
+                .fee('10000000')
+                .typeGroup(1)
+                .sign(hmesh_client_mnemonic)
+                .build();
+
+            console.log('Transaction details:', transaction.data);
+            const txId = await sendTransaction(transaction.data);
+            console.log(`Successfully submitted unvote for ${delegatePublicKey}. Transaction ID: ${txId}`);
+            return txId;
+        } catch(error) {
+            console.error('Error submitting unvote transactions:', error);
+            throw error;
+        }
+    }
+
+    // Get the balance of a HMESH address
+    async function getBalance(hmeshClientAddress:string):Promise<string> {
+        try {
+            try{
+                const response = await axios.get(`${HMESH_DEVNET_NODE_URL}/api/wallets/${hmeshClientAddress}`);
+                return response.data.balance;
+            } catch(apiError) {
+                console.error('Error fetching balance from HMESH API:', apiError);
+                throw apiError;
+            }
+        } catch(error:any) {
+            console.error('Error getting balance:', error);
+            throw new Error(`Failed to get balance for ${hmeshClientAddress}: ${error.message}`);
+        }
+    }
+
     return {
         mintTokens,
-        burnTokens
+        burnTokens,
+        submitVote,
+        submitUnvote,
+        getBalance
         };
 }
 
@@ -177,3 +258,30 @@ export function createHMESHWallet() {
 
     return { encryptedMnemonic, publicKey, encryptedPrivateKey, address }
 }
+
+export async function getCurrentVotes(hmeshClientAddress: string): Promise<Array<{
+    delegateAddress: string,
+    delegatePublicKey: string,
+    delegateName: string,
+    voteWeight: string
+  }>> {
+    try {
+      const response = await axios.get(`${HMESH_DEVNET_NODE_URL}/api/wallets/${hmeshClientAddress}/votes`);
+      
+      if (!response.data || !response.data.data) {
+        return [];
+      }
+      
+      return response.data.data.map((vote: any) => ({
+        delegateAddress: vote.delegate.address,
+        delegatePublicKey: vote.delegate.publicKey,
+        delegateName: vote.delegate.username || 'Unknown',
+        voteWeight: vote.balance || '0'
+      }));
+    } catch (error) {
+      console.error('Error fetching votes:', error);
+      return [];
+    }
+  }
+  
+  
