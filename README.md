@@ -1,4 +1,4 @@
-# Arbitrum-Bridge-with-HMESH
+# Arbitrum-Smart-Bridge-with-ARK
 
 A bridge implementation that enables asset transfers between Arbitrum and the ARK V3 based custom DPoS blockchain - HMESH.
 
@@ -24,8 +24,8 @@ This project implements a cross-chain bridge that allows users to transfer token
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/BTC415/Arbitrum-Bridge-with-ARK.git
-   cd Arbitrum-Bridge-with-ARK
+   git clone https://github.com/marksantiago02/Arbitrum-Smart-Bridge-with-ARK.git
+   cd Arbitrum-Smart-Bridge-with-ARK
    ```
 
 2. Install dependencies:
